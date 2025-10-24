@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vulnerability Scanner - Web Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .header .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+
+        .warning strong {
+            color: #856404;
+        }
+
+        .scan-panel {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .options-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .scan-button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .scan-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .scan-button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results-panel {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .results-header h2 {
+            color: #333;
+        }
+
+        .localhost-badge {
+            background: #28a745;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .scan-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .scan-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .scan-info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .scan-info-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .scan-info-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .vulnerability-count {
+            text-align: center;
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+
+        .vulnerability-count.safe {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            border-radius: 5px;
+        }
+
+        .vulnerability-count.danger {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            border-radius: 5px;
+        }
+
+        .vulnerability-count h3 {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .vulnerability-count.safe h3 {
+            color: #28a745;
+        }
+
+        .vulnerability-count.danger h3 {
+            color: #dc3545;
+        }
+
+        .findings-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .finding-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            background: #ffffff;
+            transition: box-shadow 0.3s;
+        }
+
+        .finding-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .finding-card.sql-injection {
+            border-left: 4px solid #dc3545;
+        }
+
+        .finding-card.xss {
+            border-left: 4px solid #fd7e14;
+        }
+
+        .finding-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .finding-type {
+            font-size: 20px;
+            font-weight: 600;
+            color: #dc3545;
+        }
+
+        .finding-method {
+            background: #6c757d;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .finding-details {
+            display: grid;
+            gap: 10px;
+        }
+
+        .finding-detail {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .finding-detail-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .finding-detail-value {
+            color: #333;
+            word-break: break-all;
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .options-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🔒 Web Vulnerability Scanner</h1>
+            <p class="subtitle">Automated SQL Injection & XSS Detection</p>
+        </div>
+
+        <!-- Warning -->
+        <div class="warning">
+            <strong>⚠️ WARNING:</strong> Only scan systems you OWN or have explicit written permission to test. 
+            Unauthorized scanning is illegal in most countries.
+        </div>
+
+        <!-- Scan Panel -->
+        <div class="scan-panel">
+            <form id="scanForm">
+                <div class="form-group">
+                    <label for="targetUrl">Target URL</label>
+                    <input 
+                        type="text" 
+                        id="targetUrl" 
+                        name="url" 
+                        placeholder="http://example.com or http://localhost:8080"
+                        required
+                    >
+                </div>
+
+                <div class="options-row">
+                    <div class="form-group">
+                        <label for="delay">Delay (seconds)</label>
+                        <input 
+                            type="number" 
+                            id="delay" 
+                            name="delay" 
+                            value="1.0" 
+                            step="0.1" 
+                            min="0.1"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="timeout">Timeout (seconds)</label>
+                        <input 
+                            type="number" 
+                            id="timeout" 
+                            name="timeout" 
+                            value="30" 
+                            min="5"
+                            max="120"
+                        >
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            Increase if target site is slow (recommended: 30-60s for remote sites)
+                        </small>
+                    </div>
+                </div>
+
+                <button type="submit" class="scan-button" id="scanButton">
+                    🔍 Start Scan
+                </button>
+            </form>
+
+            <!-- Loading Indicator -->
+            <div class="loading" id="loadingIndicator">
+                <div class="spinner"></div>
+                <p>Scanning in progress... Please wait</p>
+            </div>
+        </div>
+
+        <!-- Results Panel -->
+        <div class="results-panel" id="resultsPanel">
+            <div class="results-header">
+                <h2>Scan Results</h2>
+                <span class="localhost-badge" id="localhostBadge" style="display: none;">
+                    🏠 Localhost
+                </span>
+            </div>
+
+            <div class="scan-info">
+                <div class="scan-info-grid">
+                    <div class="scan-info-item">
+                        <span class="scan-info-label">Target URL</span>
+                        <span class="scan-info-value" id="resultUrl">-</span>
+                    </div>
+                    <div class="scan-info-item">
+                        <span class="scan-info-label">Scan Time</span>
+                        <span class="scan-info-value" id="resultTime">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="vulnerability-count" id="vulnCount">
+                <h3 id="vulnNumber">0</h3>
+                <p id="vulnText">Vulnerabilities Found</p>
+            </div>
+
+            <div class="findings-list" id="findingsList">
+                <!-- Findings will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const scanForm = document.getElementById('scanForm');
+        const scanButton = document.getElementById('scanButton');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const resultsPanel = document.getElementById('resultsPanel');
+        const findingsList = document.getElementById('findingsList');
+
+        scanForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // Get form data
+            const targetUrl = document.getElementById('targetUrl').value;
+            const delay = parseFloat(document.getElementById('delay').value);
+            const timeout = parseInt(document.getElementById('timeout').value);
+
+            // Show loading, hide results
+            scanButton.disabled = true;
+            scanButton.textContent = '⏳ Scanning...';
+            loadingIndicator.style.display = 'block';
+            resultsPanel.style.display = 'none';
+
+            try {
+                // Send scan request
+                const response = await fetch('/scan', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        url: targetUrl,
+                        delay: delay,
+                        timeout: timeout
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayResults(data);
+                } else {
+                    displayError(data.error);
+                }
+            } catch (error) {
+                displayError('Failed to connect to scanner: ' + error.message);
+            } finally {
+                // Reset button
+                scanButton.disabled = false;
+                scanButton.textContent = '🔍 Start Scan';
+                loadingIndicator.style.display = 'none';
+            }
+        });
+
+        function displayResults(data) {
+            // Show results panel
+            resultsPanel.style.display = 'block';
+
+            // Show localhost badge if applicable
+            const localhostBadge = document.getElementById('localhostBadge');
+            localhostBadge.style.display = data.is_localhost ? 'inline-block' : 'none';
+
+            // Update scan info
+            document.getElementById('resultUrl').textContent = data.target_url;
+            document.getElementById('resultTime').textContent = new Date(data.scan_time).toLocaleString();
+
+            // Update vulnerability count
+            const vulnCount = document.getElementById('vulnCount');
+            const vulnNumber = document.getElementById('vulnNumber');
+            const vulnText = document.getElementById('vulnText');
+
+            vulnNumber.textContent = data.vulnerabilities_found;
+
+            if (data.vulnerabilities_found === 0) {
+                vulnCount.className = 'vulnerability-count safe';
+                vulnText.textContent = '✅ No Vulnerabilities Found';
+            } else {
+                vulnCount.className = 'vulnerability-count danger';
+                vulnText.textContent = '🚨 Vulnerabilities Found';
+            }
+
+            // Display findings
+            findingsList.innerHTML = '';
+
+            if (data.findings.length === 0) {
+                findingsList.innerHTML = '<p style="text-align: center; color: #28a745; font-size: 18px;">All clear! No vulnerabilities detected.</p>';
+            } else {
+                data.findings.forEach(finding => {
+                    const card = createFindingCard(finding);
+                    findingsList.appendChild(card);
+                });
+            }
+
+            // Scroll to results
+            resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function createFindingCard(finding) {
+            const card = document.createElement('div');
+            card.className = 'finding-card';
+            
+            if (finding.type.toLowerCase().includes('sql')) {
+                card.classList.add('sql-injection');
+            } else if (finding.type.toLowerCase().includes('xss')) {
+                card.classList.add('xss');
+            }
+
+            card.innerHTML = `
+                <div class="finding-header">
+                    <span class="finding-type">🚨 ${finding.type}</span>
+                    <span class="finding-method">${finding.method}</span>
+                </div>
+                <div class="finding-details">
+                    <div class="finding-detail">
+                        <span class="finding-detail-label">URL</span>
+                        <span class="finding-detail-value">${finding.url}</span>
+                    </div>
+                    <div class="finding-detail">
+                        <span class="finding-detail-label">Payload</span>
+                        <span class="finding-detail-value">${finding.payload}</span>
+                    </div>
+                    <div class="finding-detail">
+                        <span class="finding-detail-label">Evidence</span>
+                        <span class="finding-detail-value">${finding.evidence}</span>
+                    </div>
+                </div>
+            `;
+
+            return card;
+        }
+
+        function displayError(message) {
+            resultsPanel.style.display = 'block';
+            
+            // Add helpful suggestions for common errors
+            let helpText = '';
+            if (message.includes('timed out') || message.includes('timeout')) {
+                helpText = '<br><br><strong>💡 Solution:</strong> Increase the timeout value to 30-60 seconds and try again. Some websites are slow to respond.';
+            } else if (message.includes('Connection') || message.includes('connect')) {
+                helpText = '<br><br><strong>💡 Tips:</strong><br>• Check if the URL is correct and accessible<br>• Verify your internet connection<br>• Try using http:// instead of https:// (or vice versa)';
+            } else if (message.includes('URL')) {
+                helpText = '<br><br><strong>💡 Tip:</strong> Make sure the URL starts with http:// or https://';
+            }
+            
+            resultsPanel.innerHTML = `
+                <div class="error-message">
+                    <strong>❌ Error:</strong> ${message}${helpText}
+                </div>
+            `;
+            resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    </script>
+</body>
+</html>

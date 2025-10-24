@@ -1,0 +1,134 @@
+# 🌐 Web UI - Quick Start Guide
+
+## ✅ Your Scanner Now Has a Web Interface!
+
+---
+
+## 🚀 **How to Start the Web Interface**
+
+### **Option 1: Quick Start**
+```powershell
+cd "d:\Downloads\Mini Projectt\EH\trail"
+.\ethical\Scripts\python.exe app.py
+```
+
+Then open your browser to: **http://localhost:5000**
+
+---
+
+### **Option 2: Background Mode**
+```powershell
+cd "d:\Downloads\Mini Projectt\EH\trail"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd 'd:\Downloads\Mini Projectt\EH\trail'; .\ethical\Scripts\python.exe app.py"
+```
+
+Browser will open automatically!
+
+---
+
+## 📋 **How to Use the Web Interface**
+
+1. **Enter Target URL**
+   - Example: `http://testphp.vulnweb.com/artists.php?artist=1`
+   - Or localhost: `http://localhost:8080`
+
+2. **Adjust Settings (Optional)**
+   - Delay: Time between requests (default: 1.0 seconds)
+   - Timeout: Request timeout (default: 20 seconds)
+
+3. **Click "Start Scan"**
+   - Wait for scanning to complete
+   - Results will appear automatically
+
+4. **View Results**
+   - See vulnerability count
+   - View detailed findings
+   - Reports auto-saved to `./reports/` folder
+
+---
+
+## 🎯 **Features**
+
+✅ **Beautiful Web Interface** - Modern, responsive design
+✅ **Real-time Results** - See findings immediately
+✅ **Localhost Detection** - Shows 🏠 badge for local URLs
+✅ **Auto-save Reports** - JSON files saved automatically
+✅ **Color-coded Results** - Easy to identify vulnerability types
+✅ **Detailed Information** - URL, payload, method, evidence
+
+---
+
+## 📊 **What You'll See**
+
+### **No Vulnerabilities Found:**
+- Green success message
+- "✅ No Vulnerabilities Found"
+
+### **Vulnerabilities Detected:**
+- Red warning with count
+- "🚨 X Vulnerabilities Found"
+- Detailed cards for each finding:
+  - Type (SQL Injection / XSS)
+  - Method (GET / POST)
+  - Vulnerable URL
+  - Payload used
+  - Evidence found
+
+---
+
+## 💻 **Both Interfaces Available**
+
+### **Command Line (CLI):**
+```powershell
+python main.py "http://example.com"
+```
+
+### **Web Interface:**
+```powershell
+python app.py
+```
+Then use browser at http://localhost:5000
+
+---
+
+## 🛑 **To Stop the Server**
+
+Press `Ctrl + C` in the terminal where the server is running
+
+---
+
+## 📁 **File Structure**
+
+```
+trail/
+├── main.py              # CLI version
+├── app.py               # Web server (NEW)
+├── templates/
+│   └── index.html       # Web UI (NEW)
+├── scanner/             # Core scanning logic
+├── payloads/            # Test payloads
+└── reports/             # Saved scan reports (JSON)
+```
+
+---
+
+## 🎬 **Demo URLs to Try**
+
+```
+http://testphp.vulnweb.com/artists.php?artist=1
+http://testphp.vulnweb.com/listproducts.php?cat=1
+http://testphp.vulnweb.com/search.php?test=query
+```
+
+---
+
+## ✨ **Tips**
+
+- **Faster Local Scans:** Use delay 0.2 for localhost URLs
+- **Slower Scans:** Increase delay to 2.0 for careful scanning
+- **Timeout Issues:** Increase timeout to 30+ for slow servers
+- **Reports:** All scans auto-save to `reports/` folder
+
+---
+
+**Enjoy your new Web Interface!** 🎉

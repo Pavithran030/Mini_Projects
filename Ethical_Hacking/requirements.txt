@@ -1,0 +1,6 @@
+requests==2.31.0
+beautifulsoup4==4.12.2
+colorama==0.4.6
+
+# For testing localhost (optional - only if you want to run test_vulnerable_app.py)
+flask==3.1.2

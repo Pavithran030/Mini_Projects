@@ -1,0 +1,45 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Virtual Environment
+ethical/
+venv/
+ENV/
+env/
+mini/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Reports - Keep folder structure, ignore report files
+reports/*.json
+reports/*.html
+!reports/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Logs
+*.log
+*.tmp
+
+# Environment variables
+.env
