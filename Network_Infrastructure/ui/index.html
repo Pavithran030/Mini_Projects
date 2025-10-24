@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetMap - Network Scanner</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌐 NetMap</h1>
+            <p>Local Network Scanner - Discover Active Devices on Your LAN</p>
+        </div>
+
+        <div class="content">
+            <div id="alert" class="alert"></div>
+
+            <div class="sidebar">
+                <h3>ℹ️ About NetMap</h3>
+                <p style="font-size: 0.875rem; margin-bottom: 0.75rem;">
+                    NetMap is a local network scanner that helps you discover and analyze devices on your LAN.
+                </p>
+                <p style="font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem;">Features:</p>
+                <ul>
+                    <li>🔍 Automatic network detection</li>
+                    <li>📡 ARP scan for live hosts</li>
+                    <li>🏷️ MAC vendor identification</li>
+                    <li>🖥️ Hostname resolution</li>
+                    <li>🔌 Port scanning (SSH, HTTP, HTTPS)</li>
+                    <li>📊 Export results to CSV</li>
+                </ul>
+            </div>
+
+            <div class="alert alert-warning visible">
+                ⚠️ <strong>Important</strong><br>
+                • Run with administrator/root privileges for best results<br>
+                • Only scan networks you own or have permission to scan<br>
+                • Scanning may take 1-3 minutes depending on network size
+            </div>
+
+            <div class="section">
+                <h2>Network Information</h2>
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="detectNetwork()">
+                        🔍 Detect Network
+                    </button>
+                </div>
+                <div id="networkInfo" class="network-info">
+                    <div class="network-info-item">
+                        <strong>Local IP:</strong>
+                        <span id="localIp">-</span>
+                    </div>
+                    <div class="network-info-item">
+                        <strong>Subnet:</strong>
+                        <span id="subnet">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Start Network Scan</h2>
+                <div class="button-group">
+                    <button class="btn btn-success" id="scanBtn" onclick="startScan()">
+                        🚀 Start Scan
+                    </button>
+                </div>
+
+                <div id="progressContainer" class="progress-container">
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <p id="progressMessage" class="progress-message">Initializing...</p>
+                </div>
+            </div>
+
+            <div id="statistics" class="statistics">
+                <div class="stat-card">
+                    <h3 id="statTotal">0</h3>
+                    <p>Total Hosts</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="statSSH">0</h3>
+                    <p>SSH Open</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="statHTTP">0</h3>
+                    <p>HTTP Open</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="statHTTPS">0</h3>
+                    <p>HTTPS Open</p>
+                </div>
+            </div>
+
+            <div id="resultsContainer" class="results-container">
+                <div class="section">
+                    <h2>📊 Scan Results</h2>
+                    <div class="table-wrapper">
+                        <table id="resultsTable">
+                            <thead>
+                                <tr>
+                                    <th>IP Address</th>
+                                    <th>MAC Address</th>
+                                    <th>Vendor</th>
+                                    <th>Hostname</th>
+                                    <th>SSH (22)</th>
+                                    <th>HTTP (80)</th>
+                                    <th>HTTPS (443)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resultsBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h2>💾 Export Results</h2>
+                    <div id="exportSection" class="export-section visible">
+                        <div class="export-form">
+                            <input type="text" id="exportFilename" placeholder="netmap_scan_results.csv (optional)">
+                            <button class="btn btn-primary" onclick="exportResults()">
+                                📥 Export to CSV
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><strong>NetMap v1.0</strong> | Local Network Scanner</p>
+            <p style="font-size: 0.9rem; margin-top: 10px;">⚠️ Use responsibly and only on networks you own or have permission to scan</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
