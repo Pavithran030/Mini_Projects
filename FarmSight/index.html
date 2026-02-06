@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FarmSight - Agricultural Dashboard</title>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Weather Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="main-header">
+        <div class="header-container">
+            <div class="header-left">
+                <i class="fas fa-seedling logo-icon"></i>
+                <h1 class="app-title">FarmSight</h1>
+                <span class="farm-name" id="farmName">Green Valley Farms</span>
+            </div>
+            <div class="header-right">
+                <div class="location-selector">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <select id="locationSelector" class="location-select">
+                        <optgroup label="Western India">
+                            <option value="nashik" selected>Nashik, Maharashtra</option>
+                            <option value="pune">Pune, Maharashtra</option>
+                            <option value="mumbai">Mumbai, Maharashtra</option>
+                            <option value="jaipur">Jaipur, Rajasthan</option>
+                            <option value="ahmedabad">Ahmedabad, Gujarat</option>
+                        </optgroup>
+                        <optgroup label="Northern India">
+                            <option value="delhi">Delhi</option>
+                            <option value="punjab">Ludhiana, Punjab</option>
+                            <option value="haryana">Karnal, Haryana</option>
+                            <option value="up">Lucknow, UP</option>
+                        </optgroup>
+                        <optgroup label="Southern India">
+                            <option value="bangalore">Bangalore, Karnataka</option>
+                            <option value="chennai">Chennai, Tamil Nadu</option>
+                            <option value="hyderabad">Hyderabad, Telangana</option>
+                            <option value="kerala">Kochi, Kerala</option>
+                        </optgroup>
+                        <optgroup label="Eastern India">
+                            <option value="kolkata">Kolkata, West Bengal</option>
+                            <option value="bhubaneswar">Bhubaneswar, Odisha</option>
+                            <option value="patna">Patna, Bihar</option>
+                        </optgroup>
+                        <optgroup label="North-Eastern India">
+                            <option value="guwahati">Guwahati, Assam</option>
+                        </optgroup>
+                        <optgroup label="Central India">
+                            <option value="indore">Indore, MP</option>
+                            <option value="bhopal">Bhopal, MP</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="connection-status" id="connectionStatus">
+                    <i class="fas fa-wifi"></i>
+                    <span>Online Mode</span>
+                </div>
+                <button class="refresh-btn" id="refreshBtn">
+                    <i class="fas fa-sync-alt"></i>
+                    <span>Refresh Data</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard -->
+    <main class="dashboard-container">
+        <!-- Top Row: Weather & Soil Health -->
+        <div class="top-row">
+            <!-- Panel 1: Weather Dashboard -->
+            <section class="panel weather-panel">
+                <div class="panel-header">
+                    <h2><i class="fas fa-cloud-sun"></i> Weather Forecast</h2>
+                    <div class="panel-actions">
+                        <select id="weatherSource" class="control-select">
+                            <option value="auto">Auto (API + Fallback)</option>
+                            <option value="api">API Only</option>
+                            <option value="static">Static Data</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <!-- Current Weather Card -->
+                    <div class="current-weather">
+                        <div class="current-temp">
+                            <i class="wi wi-day-sunny current-weather-icon" id="currentIcon"></i>
+                            <div class="temp-display">
+                                <span class="temp-value" id="currentTemp">28</span>
+                                <span class="temp-unit">°C</span>
+                            </div>
+                        </div>
+                        <div class="current-details">
+                            <div class="detail-item">
+                                <i class="fas fa-tint"></i>
+                                <span id="currentHumidity">45</span>%
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-wind"></i>
+                                <span id="currentWind">12</span> km/h
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-droplet"></i>
+                                <span id="currentRainfall">0</span> mm
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 7-Day Forecast Chart -->
+                    <div class="chart-container">
+                        <canvas id="weatherChart"></canvas>
+                    </div>
+
+                    <!-- Weather Advisory -->
+                    <div class="weather-advisory" id="weatherAdvisory">
+                        <i class="fas fa-lightbulb"></i>
+                        <span>Good weather for spraying</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Panel 2: Soil Health Monitor -->
+            <section class="panel soil-panel">
+                <div class="panel-header">
+                    <h2><i class="fas fa-layer-group"></i> Soil Health Monitor</h2>
+                    <div class="panel-actions">
+                        <select id="zoneSelector" class="control-select">
+                            <option value="Z1">Zone 1 (Wheat)</option>
+                            <option value="Z2">Zone 2 (Chickpea)</option>
+                            <option value="Z3">Zone 3 (Onion)</option>
+                            <option value="Z4">Zone 4 (Wheat)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="soil-metrics-grid">
+                        <!-- Soil Moisture -->
+                        <div class="metric-card">
+                            <h3>Soil Moisture</h3>
+                            <div class="chart-wrapper">
+                                <canvas id="moistureChart"></canvas>
+                                <div class="chart-center-value">
+                                    <span class="value" id="moistureValue">68</span>
+                                    <span class="unit">%</span>
+                                </div>
+                            </div>
+                            <div class="metric-status optimal" id="moistureStatus">Optimal</div>
+                        </div>
+
+                        <!-- pH Level -->
+                        <div class="metric-card">
+                            <h3>pH Level</h3>
+                            <div class="chart-wrapper">
+                                <canvas id="phChart"></canvas>
+                                <div class="chart-center-value">
+                                    <span class="value" id="phValue">7.2</span>
+                                    <span class="unit"></span>
+                                </div>
+                            </div>
+                            <div class="metric-status optimal" id="phStatus">Optimal</div>
+                        </div>
+
+                        <!-- NPK Status -->
+                        <div class="metric-card npk-card">
+                            <h3>NPK Status (mg/kg)</h3>
+                            <div class="npk-bars">
+                                <div class="npk-bar">
+                                    <label>N <span id="nValue">145</span></label>
+                                    <div class="bar-container">
+                                        <div class="bar-fill nitrogen" id="nBar" style="width: 72.5%"></div>
+                                    </div>
+                                </div>
+                                <div class="npk-bar">
+                                    <label>P <span id="pValue">22</span></label>
+                                    <div class="bar-container">
+                                        <div class="bar-fill phosphorus" id="pBar" style="width: 44%"></div>
+                                    </div>
+                                </div>
+                                <div class="npk-bar">
+                                    <label>K <span id="kValue">285</span></label>
+                                    <div class="bar-container">
+                                        <div class="bar-fill potassium" id="kBar" style="width: 71.25%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Overall Health Score -->
+                        <div class="metric-card">
+                            <h3>Overall Health</h3>
+                            <div class="chart-wrapper">
+                                <canvas id="healthChart"></canvas>
+                                <div class="chart-center-value">
+                                    <span class="value" id="healthValue">85</span>
+                                    <span class="unit">%</span>
+                                </div>
+                            </div>
+                            <div class="metric-status optimal" id="healthStatus">Excellent</div>
+                        </div>
+                    </div>
+
+                    <!-- Recommendations -->
+                    <div class="recommendations" id="recommendations">
+                        <h4><i class="fas fa-clipboard-list"></i> Recommendations</h4>
+                        <ul id="recommendationsList">
+                            <li>Maintain current irrigation schedule</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Panel 3: Interactive Farm Map -->
+        <section class="panel map-panel">
+            <div class="panel-header">
+                <h2><i class="fas fa-map-marked-alt"></i> Farm Map</h2>
+                <div class="panel-actions">
+                    <button class="map-btn" id="toggleSatellite">
+                        <i class="fas fa-satellite"></i> Satellite
+                    </button>
+                </div>
+            </div>
+            <div class="panel-body map-body">
+                <div id="farmMap" class="farm-map"></div>
+                <div class="map-legend">
+                    <h4>Crop Zones</h4>
+                    <div class="legend-item">
+                        <span class="legend-color optimal"></span>
+                        <span>Optimal Health</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color monitor"></span>
+                        <span>Monitor Required</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color critical"></span>
+                        <span>Critical - Action Needed</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Bottom Row: Timeline, Market, Alerts -->
+        <div class="bottom-row">
+            <!-- Panel 4: Crop Timeline -->
+            <section class="panel timeline-panel">
+                <div class="panel-header">
+                    <h2><i class="fas fa-calendar-alt"></i> Crop Timeline</h2>
+                    <div class="panel-actions">
+                        <select id="cropSelector" class="control-select">
+                            <option value="CROP001">Wheat (HD-2967)</option>
+                            <option value="CROP002">Chickpea (JG-11)</option>
+                            <option value="CROP003">Onion (N-53)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="timeline-container" id="timelineContainer">
+                        <!-- Timeline will be generated dynamically -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Panel 5: Market Intelligence -->
+            <section class="panel market-panel">
+                <div class="panel-header">
+                    <h2><i class="fas fa-chart-line"></i> Market Intelligence</h2>
+                </div>
+                <div class="panel-body">
+                    <div class="market-overview">
+                        <div class="market-cards">
+                            <!-- Wheat Card -->
+                            <div class="market-card" id="marketCardCROP001">
+                                <div class="market-header">
+                                    <h3>Wheat</h3>
+                                    <span class="price-trend up">
+                                        <i class="fas fa-arrow-up"></i> +3.5%
+                                    </span>
+                                </div>
+                                <div class="current-price">
+                                    <span class="price-value">₹2,150</span>
+                                    <span class="price-unit">/quintal</span>
+                                </div>
+                                <div class="msp-comparison">
+                                    <label>MSP: ₹2,125</label>
+                                    <div class="comparison-bar">
+                                        <div class="current-bar" style="width: 101.2%"></div>
+                                        <div class="msp-marker"></div>
+                                    </div>
+                                </div>
+                                <div class="market-action">
+                                    <span class="action-badge hold">MONITOR</span>
+                                    <span class="mandi-name">Nashik APMC</span>
+                                </div>
+                                <div class="price-chart-mini">
+                                    <canvas id="wheatPriceChart"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Chickpea Card -->
+                            <div class="market-card" id="marketCardCROP002">
+                                <div class="market-header">
+                                    <h3>Chickpea</h3>
+                                    <span class="price-trend stable">
+                                        <i class="fas fa-minus"></i> -0.8%
+                                    </span>
+                                </div>
+                                <div class="current-price">
+                                    <span class="price-value">₹5,850</span>
+                                    <span class="price-unit">/quintal</span>
+                                </div>
+                                <div class="msp-comparison">
+                                    <label>MSP: ₹5,230</label>
+                                    <div class="comparison-bar">
+                                        <div class="current-bar" style="width: 111.8%"></div>
+                                        <div class="msp-marker"></div>
+                                    </div>
+                                </div>
+                                <div class="market-action">
+                                    <span class="action-badge sell">SELL NOW</span>
+                                    <span class="mandi-name">Nashik APMC</span>
+                                </div>
+                                <div class="price-chart-mini">
+                                    <canvas id="chickpeaPriceChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Revenue Calculator -->
+                        <div class="revenue-calculator">
+                            <h4><i class="fas fa-calculator"></i> Expected Revenue</h4>
+                            <div class="calculator-inputs">
+                                <div class="input-group">
+                                    <label>Crop:</label>
+                                    <select id="revenueCrop">
+                                        <option value="CROP001">Wheat (12 acres)</option>
+                                        <option value="CROP002">Chickpea (8.5 acres)</option>
+                                    </select>
+                                </div>
+                                <div class="input-group">
+                                    <label>Expected Yield (quintals/acre):</label>
+                                    <input type="number" id="expectedYield" value="15" min="1" max="50">
+                                </div>
+                                <div class="revenue-result">
+                                    <span class="result-label">Total Revenue:</span>
+                                    <span class="result-value" id="totalRevenue">₹3,87,000</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Panel 6: Alerts & Notifications -->
+            <section class="panel alerts-panel">
+                <div class="panel-header">
+                    <h2><i class="fas fa-bell"></i> Alerts & Notifications</h2>
+                    <button class="clear-btn" id="clearAlerts">
+                        <i class="fas fa-trash"></i> Clear All
+                    </button>
+                </div>
+                <div class="panel-body">
+                    <div class="alerts-container" id="alertsContainer">
+                        <!-- Alerts will be generated dynamically -->
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <i class="fas fa-info-circle"></i>
+        <span id="toastMessage">Notification</span>
+    </div>
+
+    <!-- Loading Spinner Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p>Loading data...</p>
+    </div>
+
+    <!-- Scripts -->
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Application Scripts -->
+    <script src="js/data-manager.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/chart-configs.js"></script>
+    <script src="js/map-controller.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
