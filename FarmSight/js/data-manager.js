@@ -419,13 +419,16 @@ class DataManager {
     async fetchDynamicWeather() {
         if (!this.useAPI || !this.isOnline) {
             console.log('→ API key not configured or offline - using static weather data');
-            return this.getStaticWeather();
+            const staticWeather = this.getStaticWeather();
+            this.weatherData = staticWeather;
+            return staticWeather;
         }
         
         // Check cache first
         const cached = this.getCachedWeather();
         if (cached) {
             console.log('→ Using cached weather data');
+            this.weatherData = cached;
             return cached;
         }
         
@@ -444,6 +447,7 @@ class DataManager {
             
             // Cache the result
             this.cacheWeatherData(processedData);
+            this.weatherData = processedData;
             
             console.log('✓ Live weather data fetched successfully');
             return processedData;
@@ -451,8 +455,38 @@ class DataManager {
         } catch (error) {
             console.warn('⚠ API fetch failed:', error.message);
             console.log('→ Falling back to static weather data');
-            return this.getStaticWeather();
+            const staticWeather = this.getStaticWeather();
+            this.weatherData = staticWeather;
+            return staticWeather;
         }
+    }
+
+    // Strict API mode for demos: no static fallback when user explicitly selects API mode.
+    async fetchDynamicWeatherStrict() {
+        if (!this.useAPI) {
+            throw new Error('API key not configured. Set WEATHER_API_KEY in js/data-manager.js');
+        }
+
+        if (!this.isOnline) {
+            throw new Error('Offline mode detected. Connect to internet for API-only weather.');
+        }
+
+        console.log(`→ Strict API mode: fetching live weather for ${this.currentLocation.name}...`);
+        const url = `${API_CONFIG.WEATHER_API_URL}?lat=${this.currentLocation.lat}&lon=${this.currentLocation.lon}&appid=${API_CONFIG.WEATHER_API_KEY}&units=metric`;
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`API Error: ${response.status} - ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const processedData = this.processAPIWeatherData(data);
+
+        this.cacheWeatherData(processedData);
+        this.weatherData = processedData;
+
+        console.log('✓ Live weather data fetched successfully (strict API mode)');
+        return processedData;
     }
     
     processAPIWeatherData(apiData) {
@@ -602,7 +636,9 @@ class DataManager {
     }
     
     getStaticWeather() {
-        return { ...WEATHER_STATIC, source: 'static' };
+        const staticWeather = { ...WEATHER_STATIC, source: 'static' };
+        this.weatherData = staticWeather;
+        return staticWeather;
     }
     
     // ═══════════════════════════════════════════════════════════════════

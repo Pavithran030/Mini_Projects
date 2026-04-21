@@ -196,6 +196,11 @@ function initializeEventListeners() {
                 
                 // Update farm name display
                 document.getElementById('farmName').textContent = `${newLocation.name} Region`;
+
+                // Recenter map to selected location for a consistent live demo experience
+                if (typeof updateMapLocation === 'function') {
+                    updateMapLocation(newLocation.lat, newLocation.lon, newLocation.name);
+                }
                 
                 // Trigger weather refresh
                 await handleRefreshData();
@@ -281,7 +286,7 @@ function initializeEventListeners() {
     setInterval(() => {
         if (!appState.isRefreshing) {
             console.log('→ Auto-refresh triggered');
-            updateAlertsPanel();
+            handleRefreshData();
         }
     }, 5 * 60 * 1000); // 5 minutes
     
@@ -321,8 +326,8 @@ async function handleRefreshData() {
             console.log('→ Using static weather data (forced)');
             weatherData = dataManager.getStaticWeather();
         } else if (sourceMode === 'api') {
-            console.log('→ Attempting API fetch (forced)');
-            weatherData = await dataManager.fetchDynamicWeather();
+            console.log('→ Attempting strict API fetch (no static fallback)');
+            weatherData = await dataManager.fetchDynamicWeatherStrict();
         } else {
             // Auto mode - try API, fallback to static
             console.log('→ Auto mode - attempting API with fallback');
@@ -350,7 +355,7 @@ async function handleRefreshData() {
         
         hideLoading();
         
-        const source = weatherData.source === 'api' ? 'live API data' : 'static fallback data';
+        const source = weatherData.source === 'api' ? 'live API data' : 'static data';
         showToast(`✓ Data refreshed using ${source}`, 3000);
         
         console.log('✓ Refresh completed successfully');
@@ -358,7 +363,13 @@ async function handleRefreshData() {
         
     } catch (error) {
         hideLoading();
-        handleError(error, 'Refresh failed');
+        const sourceMode = appState.weatherSource;
+        if (sourceMode === 'api') {
+            showToast(`API-only refresh failed: ${error.message}`, 4500);
+            console.error('API-only refresh failed:', error);
+        } else {
+            handleError(error, 'Refresh failed');
+        }
     } finally {
         appState.isRefreshing = false;
         

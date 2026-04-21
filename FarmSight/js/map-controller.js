@@ -7,6 +7,7 @@ let zonePolygons = [];
 let satelliteLayer = null;
 let streetLayer = null;
 let currentBaseLayer = 'street';
+let farmCenterMarker = null;
 
 // ═══════════════════════════════════════════════════════════════════
 // INITIALIZE FARM MAP
@@ -89,7 +90,7 @@ function initializeFarmMap() {
     });
     
     // Add farm center marker
-    const farmMarker = L.marker([lat, lon], {
+    farmCenterMarker = L.marker([lat, lon], {
         icon: L.divIcon({
             className: 'farm-center-marker',
             html: '<i class="fas fa-tractor" style="font-size: 24px; color: #2E7D32;"></i>',
@@ -97,7 +98,7 @@ function initializeFarmMap() {
         })
     }).addTo(farmMap);
     
-    farmMarker.bindPopup(`
+    farmCenterMarker.bindPopup(`
         <div class="zone-popup">
             <h3>${farmProfile.farm_name}</h3>
             <p><strong>Location:</strong> ${farmProfile.location.name}</p>
@@ -111,6 +112,28 @@ function initializeFarmMap() {
     
     // Check URL hash for zone selection
     checkURLHash();
+}
+
+function updateMapLocation(lat, lon, locationName) {
+    if (!farmMap || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+        return;
+    }
+
+    farmMap.setView([lat, lon], farmMap.getZoom());
+
+    if (farmCenterMarker) {
+        farmCenterMarker.setLatLng([lat, lon]);
+        const popup = farmCenterMarker.getPopup();
+        if (popup) {
+            const content = popup.getContent();
+            if (typeof content === 'string') {
+                const updatedContent = content.replace(/<p><strong>Location:<\/strong>.*?<\/p>/, `<p><strong>Location:</strong> ${locationName}</p>`);
+                farmCenterMarker.setPopupContent(updatedContent);
+            }
+        }
+    }
+
+    console.log(`✓ Map recentered to ${locationName}`);
 }
 
 // ═══════════════════════════════════════════════════════════════════

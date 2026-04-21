@@ -76,7 +76,7 @@ const url = `${API_URL}?lat=${currentLocation.lat}&lon=${currentLocation.lon}&ap
 - ✅ **Weather condition** (Sunny, Cloudy, Rain, etc.)
 - ✅ **Weather icons** (condition-based)
 - ✅ **Agricultural advisories** (generated from conditions)
-- ✅ **7-day forecast** (auto-aggregated from 3-hour data)
+- ✅ **5-day live forecast** (auto-aggregated from 3-hour data)
 
 ### Data Flow:
 ```
@@ -91,7 +91,7 @@ Location Change → API Fetch (lat, lon) → Process Data → Update Charts → 
 
 ### What Gets Updated:
 - Current weather card (temp, humidity, wind, rainfall)
-- 7-day forecast chart (temperature + rainfall bars)
+- 5-day live forecast chart (temperature + rainfall bars)
 - Weather advisory message
 - Weather-based alerts
 
@@ -268,7 +268,7 @@ Change → Load timeline → Render stages → Show progress → Display next ac
 #### Weather Source:
 ```
 Auto → Tries API, falls back
-API Only → Forces API attempt
+API Only → Forces API attempt (no static fallback)
 Static → Uses embedded data
 ```
 

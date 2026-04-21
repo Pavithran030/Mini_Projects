@@ -434,7 +434,7 @@ function updateSoilCharts(zoneData) {
     // Moisture contribution (30%)
     if (zoneData.moisture_percent >= 50 && zoneData.moisture_percent <= 80) {
         healthScore += 30;
-    } else if (zoneData.moisture_percent >= 40 || zoneData.moisture_percent <= 85) {
+    } else if (zoneData.moisture_percent >= 40 && zoneData.moisture_percent <= 85) {
         healthScore += 20;
     } else {
         healthScore += 10;

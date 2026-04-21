@@ -11,7 +11,7 @@
 ## ✨ Features
 
 ### 📊 **Real-time Weather Monitoring**
-- 7-day forecast with dual-axis charts (temperature + rainfall)
+- 5-day live forecast with dual-axis charts (temperature + rainfall)
 - Current weather conditions display
 - Weather-based agricultural advisories
 - **Dynamic API Integration** with OpenWeatherMap
@@ -146,6 +146,7 @@ Each zone includes:
 - Status-based recommendations
 
 ### Weather Data (7-Day Forecast)
+### Weather Data (Live: 5-Day Forecast)
 - Min/max temperatures
 - Humidity, rainfall, wind speed
 - Weather conditions & icons
@@ -182,7 +183,7 @@ Each zone includes:
 ### **Dashboard Navigation**
 
 1. **Weather Panel** (Top Left)
-   - View 7-day forecast
+   - View 5-day live forecast
    - Check current conditions
    - Read agricultural advisories
    - Toggle data source (API/Static/Auto)
