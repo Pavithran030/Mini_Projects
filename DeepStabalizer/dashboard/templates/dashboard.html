@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeepStable Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <main class="container">
+    <section class="header">
+      <span class="eyebrow">Synthetic demo mode</span>
+      <h1>DeepStable Live Monitor</h1>
+      <p>Understand the project visually first: raw tremor, clean reference, and filtered output are generated from demo data.</p>
+    </section>
+
+    <section class="hero">
+      <div>
+        <h2>What you are seeing</h2>
+        <p>This dashboard shows a simple synthetic demo of surgical motion assistance. Raw motion contains tremor, intent prediction estimates the surgeon's purpose, tremor level shows instability, and safe robot command shows the assisted output.</p>
+      </div>
+      <div class="hero-meta">
+        <span>Mode</span>
+        <strong id="modeLabel">synthetic demo</strong>
+      </div>
+    </section>
+
+    <section class="cards">
+      <article class="card card-accent">
+        <h2>Intent Prediction</h2>
+        <p id="intentPrediction">0.00%</p>
+      </article>
+      <article class="card">
+        <h2>Tremor Level</h2>
+        <p id="tremorLevel">0.00%</p>
+      </article>
+      <article class="card">
+        <h2>Safe Robot Command</h2>
+        <p id="safeCommand">Ready</p>
+      </article>
+      <article class="card">
+        <h2>Risk Score</h2>
+        <p id="riskScore">0</p>
+      </article>
+    </section>
+
+    <section class="legend">
+      <span><i class="dot raw"></i> Raw motion</span>
+      <span><i class="dot ref"></i> Intent prediction</span>
+      <span><i class="dot filtered"></i> Safe robot command</span>
+    </section>
+
+    <section class="chart-wrap">
+      <canvas id="signalChart"></canvas>
+    </section>
+  </main>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>

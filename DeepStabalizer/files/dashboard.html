@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DeepStable – Motion Stabilization Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <span class="logo-icon">◈</span>
+      <span class="logo-text">Deep<strong>Stable</strong></span>
+    </div>
+    <div class="header-status">
+      <span id="mode-badge" class="badge badge--demo">DEMO</span>
+      <span id="live-dot" class="live-dot"></span>
+      <span class="live-label">LIVE</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- ── Top metric cards ─────────────────────────────────────────── -->
+    <section class="cards">
+      <div class="card card--risk" id="card-risk">
+        <div class="card-label">Risk Score</div>
+        <div class="card-value" id="risk-val">—</div>
+        <div class="card-bar">
+          <div class="card-bar-fill" id="risk-bar"></div>
+        </div>
+      </div>
+
+      <div class="card" id="card-label">
+        <div class="card-label">Motion State</div>
+        <div class="card-value card-value--state" id="state-val">—</div>
+      </div>
+
+      <div class="card" id="card-tremor">
+        <div class="card-label">Tremor Level</div>
+        <div class="card-value" id="tremor-val">—</div>
+        <div class="card-bar">
+          <div class="card-bar-fill card-bar-fill--tremor" id="tremor-bar"></div>
+        </div>
+      </div>
+
+      <div class="card card--cmd" id="card-cmd">
+        <div class="card-label">Robot Command</div>
+        <div class="card-value card-value--cmd" id="cmd-val">—</div>
+      </div>
+    </section>
+
+    <!-- ── Charts ───────────────────────────────────────────────────── -->
+    <section class="charts">
+      <div class="chart-box">
+        <div class="chart-title">Accelerometer X  –  Raw Motion</div>
+        <canvas id="chart-ax"></canvas>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">Risk Score  –  Over Time</div>
+        <canvas id="chart-risk"></canvas>
+      </div>
+    </section>
+
+    <!-- ── Sensor readings table ────────────────────────────────────── -->
+    <section class="sensor-table-wrap">
+      <h3 class="section-title">Latest Sensor Readings</h3>
+      <table class="sensor-table">
+        <thead>
+          <tr>
+            <th>aX</th><th>aY</th><th>aZ</th>
+            <th>gX</th><th>gY</th><th>gZ</th>
+            <th>mX</th><th>mY</th><th>mZ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="sensor-row">
+            <td>—</td><td>—</td><td>—</td>
+            <td>—</td><td>—</td><td>—</td>
+            <td>—</td><td>—</td><td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer>
+    DeepStable &nbsp;|&nbsp; AI-Assisted Motion Stabilization Prototype &nbsp;|&nbsp;
+    Not a certified medical device
+  </footer>
+
+  <!-- Chart.js from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>
