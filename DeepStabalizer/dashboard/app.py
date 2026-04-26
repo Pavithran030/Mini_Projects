@@ -1,89 +1,149 @@
-from __future__ import annotations
+"""
+DeepStable - Flask Dashboard
+Serves the live motion-stability dashboard.
 
-import itertools
+Run
+---
+python dashboard/app.py
+Then open  http://127.0.0.1:5000
+"""
+
 import os
 import sys
+import json
 import threading
 import time
-from collections import deque
+import random
 
-import numpy as np
-from flask import Flask, jsonify, render_template
+from flask import Flask, render_template, jsonify, request
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from dashboard.demo_data import compute_demo_metrics, generate_demo_signal
+# ── Try to load the real predictor; fall back to demo mode if not trained ────
+try:
+    from inference import DeepStablePredictor
+    predictor = DeepStablePredictor(model_dir=os.path.join(
+        os.path.dirname(__file__), "..", "model"
+    ))
+    REAL_MODEL = True
+    print("[dashboard] Real model loaded.")
+except Exception as e:
+    predictor  = None
+    REAL_MODEL = False
+    print(f"[dashboard] No trained model found ({e}). Running in demo mode.")
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
+# ── App ───────────────────────────────────────────────────────────────────────
 
-signal_buffer: deque[list[float]] = deque(maxlen=40)
-intent_buffer: deque[list[float]] = deque(maxlen=40)
-safe_command_buffer: deque[list[float]] = deque(maxlen=40)
-metrics_buffer: deque[dict[str, float]] = deque(maxlen=40)
+TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
+STATIC_DIR   = os.path.join(os.path.dirname(__file__), "static")
+
+app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
+
+# ── In-memory state shared between the demo thread and the HTTP handlers ─────
+_state_lock = threading.Lock()
+_state = {
+    "aX": 0.0, "aY": 0.0, "aZ": 9.81,
+    "gX": 0.0, "gY": 0.0, "gZ": 0.0,
+    "mX": 28.0, "mY": -10.0, "mZ": 4.5,
+    "risk_score":  0.05,
+    "label":       "stable",
+    "tremor_level": 0.05,
+    "safe_command": "ALLOW",
+    "history": [],
+}
+
+MAX_HISTORY = 60
 
 
-def signal_stream() -> None:
-    phases = itertools.count()
+def _tremor_sim(t: float, intensity: float = 0.3) -> float:
+    """Produces a simple sinusoidal tremor component."""
+    return intensity * (
+        0.5 * random.gauss(0, 1) +
+        0.3 * abs(random.gauss(0, 1))
+    )
+
+
+def _demo_loop():
+    """Background thread that advances the synthetic sensor stream."""
+    t = 0.0
     while True:
-        phase = next(phases) * 0.12
-        _, raw_motion, intent_prediction, safe_robot_command = generate_demo_signal(duration=1, fs=100, phase=phase)
-        metrics = compute_demo_metrics(raw_motion, intent_prediction, safe_robot_command)
+        # Generate synthetic sensor values with occasional tremor bursts
+        tremor = _tremor_sim(t, intensity=0.4 if (t % 30) < 10 else 0.05)
 
-        signal_buffer.append(raw_motion.tolist())
-        intent_buffer.append(intent_prediction.tolist())
-        safe_command_buffer.append(safe_robot_command.tolist())
-        metrics_buffer.append(metrics)
-        time.sleep(0.1)
+        reading = {
+            "aX": round(random.gauss(0.0, 0.1) + tremor, 4),
+            "aY": round(random.gauss(0.0, 0.1),           4),
+            "aZ": round(9.81 + random.gauss(0, 0.05),     4),
+            "gX": round(random.gauss(0.0, 0.02) + tremor * 0.3, 4),
+            "gY": round(random.gauss(0.0, 0.02),           4),
+            "gZ": round(random.gauss(0.0, 0.02),           4),
+            "mX": round(28.0 + random.gauss(0, 0.5),       4),
+            "mY": round(-10.0 + random.gauss(0, 0.5),      4),
+            "mZ": round(4.5  + random.gauss(0, 0.3),       4),
+        }
+
+        if REAL_MODEL and predictor:
+            result = predictor.predict_single(**reading)
+            risk   = result["risk_score"]
+            label  = result["label"]
+        else:
+            risk  = round(min(1.0, abs(tremor) * 2 + random.uniform(0, 0.1)), 3)
+            label = "unstable" if risk > 0.5 else "stable"
+
+        tremor_level = round(min(1.0, abs(tremor) * 3), 3)
+        safe_cmd     = "HOLD" if risk > 0.6 else ("CAUTION" if risk > 0.3 else "ALLOW")
+
+        with _state_lock:
+            _state.update({
+                **reading,
+                "risk_score":   risk,
+                "label":        label,
+                "tremor_level": tremor_level,
+                "safe_command": safe_cmd,
+            })
+            _state["history"].append({
+                "t":     round(t, 2),
+                "aX":    reading["aX"],
+                "risk":  risk,
+                "label": label,
+            })
+            if len(_state["history"]) > MAX_HISTORY:
+                _state["history"].pop(0)
+
+        t += 0.5
+        time.sleep(0.5)
 
 
-threading.Thread(target=signal_stream, daemon=True).start()
-
+# ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
     return render_template("dashboard.html")
 
 
-@app.route("/api/signal")
-def get_signal():
-    if not signal_buffer:
-        return jsonify(
-            {
-                "raw": [],
-                "intent_prediction": [],
-                "safe_robot_command": [],
-                "tremor_level": 0.0,
-                "intent_score": 0.0,
-                "safe_command_label": "stable motion",
-                "snr_raw": 0.0,
-                "snr_safe": 0.0,
-                "risk_score": 0,
-                "mode": "demo",
-            }
-        )
+@app.route("/api/state")
+def api_state():
+    with _state_lock:
+        return jsonify(dict(_state))
 
-    raw = np.array(signal_buffer[-1], dtype=np.float32)
-    intent_prediction = np.array(intent_buffer[-1], dtype=np.float32)
-    safe_robot_command = np.array(safe_command_buffer[-1], dtype=np.float32)
-    metrics = metrics_buffer[-1]
 
-    return jsonify(
-        {
-            "raw": raw.tolist(),
-            "intent_prediction": intent_prediction.tolist(),
-            "safe_robot_command": safe_robot_command.tolist(),
-            "intent_score": metrics["intent_score"],
-            "tremor_level": metrics["tremor_level"],
-            "snr_raw": metrics["snr_raw"],
-            "snr_safe": metrics["snr_safe"],
-            "risk_score": metrics["risk_score"],
-            "safe_command_label": metrics["command_label"],
-            "mode": "synthetic demo",
-        }
-    )
+@app.route("/api/predict", methods=["POST"])
+def api_predict():
+    """Allow the dashboard to POST raw sensor values and get a live prediction."""
+    if not REAL_MODEL:
+        return jsonify({"error": "Model not loaded. Train first."}), 503
 
+    data = request.get_json(force=True)
+    try:
+        result = predictor.predict_single(**data)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    t = threading.Thread(target=_demo_loop, daemon=True)
+    t.start()
+    app.run(host="0.0.0.0", port=5000, debug=False)

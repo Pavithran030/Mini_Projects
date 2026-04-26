@@ -1,24 +1,60 @@
-# DeepStable Prototype
-
-DeepStable is a rapid prototype for physiological tremor cancellation using a Transformer + BiLSTM model.
+# DeepStable – AI-Assisted Motion Stabilization Prototype
 
 ## Quick Start
 
-1. Create and activate venv:
-   - Windows PowerShell:
-     - `python -m venv venv`
-     - `venv\Scripts\Activate.ps1`
-2. Install deps:
-   - `pip install -r requirements.txt`
-3. Train a quick model:
-   - `python training/train.py`
-4. Evaluate:
-   - `python training/evaluate.py`
-5. Run dashboard:
-   - `python dashboard/app.py`
-6. Open http://127.0.0.1:5000
+```powershell
+# 1  Install dependencies
+pip install -r requirements.txt
 
-## Notes
+# 2  Place the Kaggle tremor dataset at
+#    data/raw/Dataset.csv
 
-- This implementation uses synthetic data for fast prototyping.
-- Model checkpoint is saved to `model/deepstable_model.pth`.
+# 3  Train (creates model/sensor_classifier.pth and model/scaler.pkl)
+python training/train.py --epochs 50
+
+# 4  Evaluate on the held-out test set
+python training/evaluate.py
+
+# 5  Run the live dashboard
+python dashboard/app.py
+#    Open  http://127.0.0.1:5000
+```
+
+## Project Layout
+
+```
+deepstable/
+├── data/raw/Dataset.csv          ← Kaggle tremor dataset (add manually)
+├── model/
+│   ├── sensor_classifier.py      ← MLP classifier definition
+│   ├── sensor_classifier.pth     ← saved checkpoint (after training)
+│   └── scaler.pkl                ← fitted normalizer (after training)
+├── preprocessing/
+│   └── normalise.py              ← SensorNormalizer (fit/transform/save/load)
+├── training/
+│   ├── dataset.py                ← load_dataset / split_dataset
+│   ├── train.py                  ← full training loop with early stopping
+│   └── evaluate.py               ← test-set metrics and confusion matrix
+├── dashboard/
+│   ├── app.py                    ← Flask server + demo stream
+│   ├── templates/dashboard.html
+│   └── static/
+│       ├── dashboard.js
+│       └── style.css
+├── inference.py                  ← DeepStablePredictor (load & predict)
+├── requirements.txt
+└── README.md
+```
+
+## train.py flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--data` | `data/raw/Dataset.csv` | Path to input CSV |
+| `--model-dir` | `model` | Where to save checkpoint + scaler |
+| `--epochs` | `50` | Max training epochs |
+| `--batch-size` | `128` | Mini-batch size |
+| `--lr` | `3e-4` | Initial learning rate |
+| `--dropout` | `0.3` | Dropout probability |
+| `--patience` | `10` | Early-stopping patience |
+| `--no-weighted-loss` | — | Disable class-weight balancing |

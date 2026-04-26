@@ -1,111 +1,104 @@
-from __future__ import annotations
+"""
+DeepStable - Dataset Loader and Splitter
+Loads the Kaggle tremor/motion sensor dataset, cleans it, and splits into
+train / validation / test sets.
+"""
 
-from dataclasses import dataclass
-from pathlib import Path
-import csv
-
+import os
 import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
 
-FEATURE_COLUMNS = ("aX", "aY", "aZ", "gX", "gY", "gZ", "mX", "mY", "mZ")
-LABEL_COLUMN = "Result"
-
-
-@dataclass(frozen=True)
-class Standardizer:
-    mean: np.ndarray
-    std: np.ndarray
+FEATURE_COLS = ["aX", "aY", "aZ", "gX", "gY", "gZ", "mX", "mY", "mZ"]
+TARGET_COL   = "Result"
 
 
-def resolve_dataset_path(preferred_path: str | Path | None = None) -> Path:
-    candidates: list[Path] = []
+def load_dataset(csv_path: str) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Load the raw CSV, drop invalid rows, and return (X, y) as NumPy arrays.
 
-    if preferred_path is not None:
-        candidates.append(Path(preferred_path))
+    Returns
+    -------
+    X : ndarray of shape (N, 9)  – sensor features
+    y : ndarray of shape (N,)    – integer labels
+    """
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(
+            f"Dataset not found at '{csv_path}'.\n"
+            "Download the Kaggle tremor dataset and place it at data/raw/Dataset.csv"
+        )
 
-    candidates.append(Path(__file__).resolve().parents[1] / "data" / "raw" / "Dataset.csv")
-    candidates.append(Path(r"d:/Downloads/tremor/Dataset.csv"))
+    df = pd.read_csv(csv_path)
 
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
+    # ── Validate expected columns ────────────────────────────────────────────
+    missing = [c for c in FEATURE_COLS + [TARGET_COL] if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"The following required columns are missing from the CSV: {missing}\n"
+            f"Found columns: {list(df.columns)}"
+        )
 
-    raise FileNotFoundError(
-        "Could not find Dataset.csv. Place it in data/raw/Dataset.csv or pass --data-path."
+    # ── Drop rows with any NaN / Inf in feature or target columns ────────────
+    before = len(df)
+    df = df[FEATURE_COLS + [TARGET_COL]].copy()
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df.dropna(inplace=True)
+    after = len(df)
+
+    if before != after:
+        print(f"[dataset] Dropped {before - after} invalid rows  ({after} remain)")
+
+    X = df[FEATURE_COLS].values.astype(np.float32)
+    y = df[TARGET_COL].values
+
+    # ── Encode labels to 0 / 1 if they are not already integers ─────────────
+    if y.dtype == object or str(y.dtype).startswith("float"):
+        classes = np.unique(y)
+        label_map = {cls: idx for idx, cls in enumerate(classes)}
+        y = np.array([label_map[v] for v in y], dtype=np.int64)
+        print(f"[dataset] Label mapping: {label_map}")
+    else:
+        y = y.astype(np.int64)
+
+    print(f"[dataset] Loaded {len(X)} samples | {len(np.unique(y))} classes | "
+          f"class counts: {dict(zip(*np.unique(y, return_counts=True)))}")
+
+    return X, y
+
+
+def split_dataset(
+    X: np.ndarray,
+    y: np.ndarray,
+    val_ratio:  float = 0.15,
+    test_ratio: float = 0.15,
+    random_state: int = 42,
+) -> tuple:
+    """
+    Split (X, y) into train / val / test.
+
+    Returns
+    -------
+    (X_train, X_val, X_test, y_train, y_val, y_test)
+    """
+    # First split off the test set
+    X_temp, X_test, y_temp, y_test = train_test_split(
+        X, y,
+        test_size=test_ratio,
+        random_state=random_state,
+        stratify=y,
     )
 
+    # Then split validation from the remainder
+    relative_val = val_ratio / (1.0 - test_ratio)
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_temp, y_temp,
+        test_size=relative_val,
+        random_state=random_state,
+        stratify=y_temp,
+    )
 
-def load_sensor_csv(csv_path: str | Path) -> tuple[np.ndarray, np.ndarray, list[str]]:
-    csv_path = Path(csv_path)
-    rows: list[list[float]] = []
-    labels: list[float] = []
-
-    with csv_path.open("r", newline="") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            rows.append([float(row[column]) for column in FEATURE_COLUMNS])
-            labels.append(float(row[LABEL_COLUMN]))
-
-    features = np.asarray(rows, dtype=np.float32)
-    targets = np.asarray(labels, dtype=np.float32)
-    return features, targets, list(FEATURE_COLUMNS)
-
-
-def clean_dataset(features: np.ndarray, targets: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    mask = np.isfinite(features).all(axis=1) & np.isfinite(targets)
-    cleaned_features = features[mask]
-    cleaned_targets = targets[mask]
-    return cleaned_features.astype(np.float32), cleaned_targets.astype(np.float32)
-
-
-def stratified_split(
-    features: np.ndarray,
-    targets: np.ndarray,
-    train_ratio: float = 0.7,
-    val_ratio: float = 0.15,
-    test_ratio: float = 0.15,
-    seed: int = 42,
-) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
-    if not np.isclose(train_ratio + val_ratio + test_ratio, 1.0):
-        raise ValueError("split ratios must add up to 1.0")
-
-    rng = np.random.default_rng(seed)
-    train_indices: list[int] = []
-    val_indices: list[int] = []
-    test_indices: list[int] = []
-
-    for label in np.unique(targets):
-        class_indices = np.where(targets == label)[0]
-        rng.shuffle(class_indices)
-
-        total = len(class_indices)
-        train_end = int(total * train_ratio)
-        val_end = train_end + int(total * val_ratio)
-
-        train_indices.extend(class_indices[:train_end].tolist())
-        val_indices.extend(class_indices[train_end:val_end].tolist())
-        test_indices.extend(class_indices[val_end:].tolist())
-
-    rng.shuffle(train_indices)
-    rng.shuffle(val_indices)
-    rng.shuffle(test_indices)
-
-    train_x, train_y = features[train_indices], targets[train_indices]
-    val_x, val_y = features[val_indices], targets[val_indices]
-    test_x, test_y = features[test_indices], targets[test_indices]
-    return (train_x, train_y), (val_x, val_y), (test_x, test_y)
-
-
-def fit_standardizer(features: np.ndarray) -> Standardizer:
-    mean = features.mean(axis=0)
-    std = features.std(axis=0)
-    std = np.where(std == 0, 1.0, std)
-    return Standardizer(mean=mean.astype(np.float32), std=std.astype(np.float32))
-
-
-def apply_standardizer(features: np.ndarray, standardizer: Standardizer) -> np.ndarray:
-    return ((features - standardizer.mean) / standardizer.std).astype(np.float32)
-
-
-def summarize_dataset(targets: np.ndarray) -> dict[str, int]:
-    unique, counts = np.unique(targets.astype(int), return_counts=True)
-    return {str(label): int(count) for label, count in zip(unique, counts)}
+    print(
+        f"[dataset] Split sizes → "
+        f"train={len(X_train)}  val={len(X_val)}  test={len(X_test)}"
+    )
+    return X_train, X_val, X_test, y_train, y_val, y_test

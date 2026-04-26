@@ -1,161 +1,251 @@
-from __future__ import annotations
+"""
+DeepStable - Training Pipeline
+Trains the SensorClassifier on the Kaggle tremor dataset.
+
+Usage
+-----
+python training/train.py                        # default settings
+python training/train.py --epochs 30 --lr 1e-3
+python training/train.py --data data/raw/Dataset.csv --batch-size 64
+"""
 
 import argparse
-from copy import deepcopy
-from pathlib import Path
 import os
 import sys
+import time
+import json
 
 import numpy as np
 import torch
-from torch import nn
+import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+# Allow imports from the project root regardless of CWD
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from training.dataset       import load_dataset, split_dataset
+from preprocessing.normalise import SensorNormalizer
 from model.sensor_classifier import SensorClassifier
-from training.dataset import apply_standardizer, clean_dataset, fit_standardizer, load_sensor_csv, resolve_dataset_path, stratified_split, summarize_dataset
 
 
-DEFAULT_DATA_PATH = Path(r"d:/Downloads/tremor/Dataset.csv")
-DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parents[1] / "model"
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def make_loader(X, y, batch_size, shuffle):
+    ds = TensorDataset(
+        torch.tensor(X, dtype=torch.float32),
+        torch.tensor(y, dtype=torch.long),
+    )
+    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, num_workers=0)
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train DeepStable on the Kaggle tremor dataset.")
-    parser.add_argument("--data-path", type=Path, default=None, help="Path to Dataset.csv")
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Directory for saved model")
-    parser.add_argument("--epochs", type=int, default=20)
-    parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--learning-rate", type=float, default=1e-3)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--patience", type=int, default=5)
-    return parser.parse_args()
+def compute_class_weights(y_train: np.ndarray, num_classes: int) -> torch.Tensor:
+    """Inverse-frequency weighting to handle class imbalance."""
+    counts = np.bincount(y_train, minlength=num_classes).astype(float)
+    weights = 1.0 / (counts + 1e-8)
+    weights /= weights.sum()
+    weights *= num_classes          # scale so mean weight ≈ 1
+    return torch.tensor(weights, dtype=torch.float32)
 
 
-def make_loader(features: np.ndarray, targets: np.ndarray, batch_size: int, shuffle: bool) -> DataLoader:
-    x_tensor = torch.tensor(features, dtype=torch.float32)
-    y_tensor = torch.tensor(targets, dtype=torch.float32)
-    dataset = TensorDataset(x_tensor, y_tensor)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+def accuracy(logits: torch.Tensor, labels: torch.Tensor) -> float:
+    preds = logits.argmax(dim=-1)
+    return (preds == labels).float().mean().item()
 
 
-def run_epoch(model: nn.Module, loader: DataLoader, loss_fn: nn.Module, optimizer: torch.optim.Optimizer | None = None) -> float:
-    is_training = optimizer is not None
-    model.train(is_training)
-    total_loss = 0.0
+class EarlyStopper:
+    def __init__(self, patience: int = 10, min_delta: float = 1e-4):
+        self.patience  = patience
+        self.min_delta = min_delta
+        self.best_val  = float("inf")
+        self.counter   = 0
 
-    for batch_x, batch_y in loader:
-        if is_training:
-            optimizer.zero_grad()
-
-        logits = model(batch_x)
-        loss = loss_fn(logits, batch_y)
-
-        if is_training:
-            loss.backward()
-            optimizer.step()
-
-        total_loss += float(loss.item())
-
-    return total_loss / max(1, len(loader))
+    def step(self, val_loss: float) -> bool:
+        """Returns True when training should stop."""
+        if val_loss < self.best_val - self.min_delta:
+            self.best_val = val_loss
+            self.counter  = 0
+            return False
+        self.counter += 1
+        return self.counter >= self.patience
 
 
-def evaluate_accuracy(model: nn.Module, loader: DataLoader) -> float:
-    model.eval()
-    correct = 0
-    total = 0
+# ─────────────────────────────────────────────────────────────────────────────
+# Train
+# ─────────────────────────────────────────────────────────────────────────────
 
-    with torch.no_grad():
-        for batch_x, batch_y in loader:
-            probabilities = torch.sigmoid(model(batch_x))
-            predictions = (probabilities >= 0.5).float()
-            correct += int((predictions == batch_y).sum().item())
-            total += int(batch_y.numel())
+def train(args):
+    device = torch.device(
+        "cuda" if torch.cuda.is_available() else
+        "mps"  if torch.backends.mps.is_available() else
+        "cpu"
+    )
+    print(f"[train] Device: {device}")
 
-    return correct / max(1, total)
+    # ── Load & split data ────────────────────────────────────────────────────
+    X, y = load_dataset(args.data)
+    X_train, X_val, X_test, y_train, y_val, y_test = split_dataset(
+        X, y,
+        val_ratio=args.val_ratio,
+        test_ratio=args.test_ratio,
+        random_state=args.seed,
+    )
 
+    # ── Normalise ────────────────────────────────────────────────────────────
+    normalizer = SensorNormalizer()
+    X_train = normalizer.fit_transform(X_train)
+    X_val   = normalizer.transform(X_val)
+    X_test  = normalizer.transform(X_test)   # kept for evaluate.py
 
-def main() -> None:
-    args = parse_args()
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
+    os.makedirs(args.model_dir, exist_ok=True)
+    normalizer.save(os.path.join(args.model_dir, "scaler.pkl"))
 
-    data_path = resolve_dataset_path(args.data_path)
-    features, targets, feature_names = load_sensor_csv(data_path)
-    features, targets = clean_dataset(features, targets)
-    print(f"Loaded dataset: {data_path}")
-    print(f"Samples: {len(features)} | Features: {feature_names}")
-    print(f"Label balance: {summarize_dataset(targets)}")
+    # Save the test split so evaluate.py can load it without re-splitting
+    np.save(os.path.join(args.model_dir, "X_test.npy"), X_test)
+    np.save(os.path.join(args.model_dir, "y_test.npy"), y_test)
 
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = stratified_split(features, targets, seed=args.seed)
-    standardizer = fit_standardizer(train_x)
+    # ── Data loaders ─────────────────────────────────────────────────────────
+    train_loader = make_loader(X_train, y_train, args.batch_size, shuffle=True)
+    val_loader   = make_loader(X_val,   y_val,   args.batch_size, shuffle=False)
 
-    train_x = apply_standardizer(train_x, standardizer)
-    val_x = apply_standardizer(val_x, standardizer)
-    test_x = apply_standardizer(test_x, standardizer)
+    # ── Model ─────────────────────────────────────────────────────────────────
+    num_classes = int(y.max()) + 1
+    model = SensorClassifier(
+        input_dim=X_train.shape[1],
+        num_classes=num_classes,
+        dropout=args.dropout,
+    ).to(device)
 
-    train_loader = make_loader(train_x, train_y, batch_size=args.batch_size, shuffle=True)
-    val_loader = make_loader(val_x, val_y, batch_size=args.batch_size, shuffle=False)
-    test_loader = make_loader(test_x, test_y, batch_size=args.batch_size, shuffle=False)
+    print(f"[train] Model params: {sum(p.numel() for p in model.parameters()):,}")
 
-    model = SensorClassifier(input_dim=train_x.shape[1])
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=1e-4)
-    positive_count = float(np.sum(train_y == 1))
-    negative_count = float(np.sum(train_y == 0))
-    pos_weight = torch.tensor([negative_count / max(1.0, positive_count)], dtype=torch.float32)
-    loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=2)
+    # ── Loss with class-weight support ───────────────────────────────────────
+    class_weights = compute_class_weights(y_train, num_classes).to(device)
+    criterion     = nn.CrossEntropyLoss(weight=class_weights if args.weighted_loss else None)
 
-    best_val_loss = float("inf")
-    best_state = None
-    best_epoch = 0
-    stalled_epochs = 0
+    # ── Optimiser + scheduler ─────────────────────────────────────────────────
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.lr, weight_decay=args.weight_decay
+    )
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=5, verbose=True
+    )
+
+    stopper    = EarlyStopper(patience=args.patience)
+    best_val   = float("inf")
+    history    = {"train_loss": [], "val_loss": [], "train_acc": [], "val_acc": []}
+
+    # ── Training loop ─────────────────────────────────────────────────────────
+    print(f"\n{'Epoch':>6}  {'Train Loss':>11}  {'Val Loss':>10}  "
+          f"{'Train Acc':>10}  {'Val Acc':>9}  {'LR':>9}  {'Time':>7}")
+    print("─" * 75)
 
     for epoch in range(1, args.epochs + 1):
-        train_loss = run_epoch(model, train_loader, loss_fn, optimizer)
-        val_loss = run_epoch(model, val_loader, loss_fn)
-        val_accuracy = evaluate_accuracy(model, val_loader)
-        scheduler.step(val_loss)
-        print(f"Epoch {epoch:02d} | train loss: {train_loss:.4f} | val loss: {val_loss:.4f} | val acc: {val_accuracy:.4f}")
+        t0 = time.time()
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_state = deepcopy(model.state_dict())
-            best_epoch = epoch
-            stalled_epochs = 0
-        else:
-            stalled_epochs += 1
+        # ── Train ──────────────────────────────────────────────────────────
+        model.train()
+        tr_loss, tr_acc = 0.0, 0.0
+        for xb, yb in train_loader:
+            xb, yb = xb.to(device), yb.to(device)
+            optimizer.zero_grad()
+            logits = model(xb)
+            loss   = criterion(logits, yb)
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+            tr_loss += loss.item() * len(xb)
+            tr_acc  += accuracy(logits, yb) * len(xb)
 
-        if stalled_epochs >= args.patience:
-            print(f"Early stopping triggered at epoch {epoch:02d}.")
+        tr_loss /= len(X_train)
+        tr_acc  /= len(X_train)
+
+        # ── Validate ───────────────────────────────────────────────────────
+        model.eval()
+        va_loss, va_acc = 0.0, 0.0
+        with torch.no_grad():
+            for xb, yb in val_loader:
+                xb, yb = xb.to(device), yb.to(device)
+                logits  = model(xb)
+                va_loss += criterion(logits, yb).item() * len(xb)
+                va_acc  += accuracy(logits, yb) * len(xb)
+
+        va_loss /= len(X_val)
+        va_acc  /= len(X_val)
+
+        scheduler.step(va_loss)
+
+        history["train_loss"].append(tr_loss)
+        history["val_loss"].append(va_loss)
+        history["train_acc"].append(tr_acc)
+        history["val_acc"].append(va_acc)
+
+        elapsed = time.time() - t0
+        current_lr = optimizer.param_groups[0]["lr"]
+        print(f"{epoch:>6}  {tr_loss:>11.4f}  {va_loss:>10.4f}  "
+              f"{tr_acc:>9.4f}   {va_acc:>8.4f}  {current_lr:>9.2e}  {elapsed:>5.1f}s")
+
+        # ── Save best checkpoint ───────────────────────────────────────────
+        if va_loss < best_val:
+            best_val = va_loss
+            ckpt_path = os.path.join(args.model_dir, "sensor_classifier.pth")
+            torch.save(
+                {
+                    "epoch":       epoch,
+                    "model_state": model.state_dict(),
+                    "val_loss":    va_loss,
+                    "val_acc":     va_acc,
+                    "input_dim":   X_train.shape[1],
+                    "num_classes": num_classes,
+                    "dropout":     args.dropout,
+                },
+                ckpt_path,
+            )
+
+        # ── Early stopping ─────────────────────────────────────────────────
+        if stopper.step(va_loss):
+            print(f"\n[train] Early stopping at epoch {epoch} (patience={args.patience})")
             break
 
-    if best_state is not None:
-        model.load_state_dict(best_state)
-        print(f"Restored best model from epoch {best_epoch:02d} with val loss {best_val_loss:.4f}")
+    # ── Save training history ─────────────────────────────────────────────────
+    history_path = os.path.join(args.model_dir, "training_history.json")
+    with open(history_path, "w") as f:
+        json.dump(history, f, indent=2)
 
-    test_loss = run_epoch(model, test_loader, loss_fn)
-    test_accuracy = evaluate_accuracy(model, test_loader)
-    print(f"Test loss: {test_loss:.4f}")
-    print(f"Test accuracy: {test_accuracy:.4f}")
+    print(f"\n[train] Best val loss: {best_val:.4f}")
+    print(f"[train] Checkpoint saved → {ckpt_path}")
+    print(f"[train] History saved   → {history_path}")
+    print("[train] Done. Run  python training/evaluate.py  to see test metrics.")
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = args.output_dir / "sensor_classifier.pth"
-    torch.save(
-        {
-            "model_state_dict": model.state_dict(),
-            "feature_names": feature_names,
-            "standardizer_mean": standardizer.mean,
-            "standardizer_std": standardizer.std,
-            "label_name": "Result",
-        },
-        checkpoint_path,
-    )
-    print(f"Saved checkpoint: {checkpoint_path}")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLI
+# ─────────────────────────────────────────────────────────────────────────────
+
+def parse_args():
+    p = argparse.ArgumentParser(description="DeepStable – train the SensorClassifier")
+    p.add_argument("--data",          default="data/raw/Dataset.csv",
+                   help="Path to the Kaggle tremor CSV")
+    p.add_argument("--model-dir",     default="model",
+                   help="Directory to save checkpoint + scaler")
+    p.add_argument("--epochs",        type=int,   default=50)
+    p.add_argument("--batch-size",    type=int,   default=128)
+    p.add_argument("--lr",            type=float, default=3e-4)
+    p.add_argument("--weight-decay",  type=float, default=1e-4)
+    p.add_argument("--dropout",       type=float, default=0.3)
+    p.add_argument("--val-ratio",     type=float, default=0.15)
+    p.add_argument("--test-ratio",    type=float, default=0.15)
+    p.add_argument("--patience",      type=int,   default=10,
+                   help="Early-stopping patience (epochs)")
+    p.add_argument("--seed",          type=int,   default=42)
+    p.add_argument("--no-weighted-loss", dest="weighted_loss",
+                   action="store_false", default=True,
+                   help="Disable inverse-frequency class weighting")
+    return p.parse_args()
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    train(args)

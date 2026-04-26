@@ -1,91 +1,162 @@
-from __future__ import annotations
+"""
+DeepStable - Model Evaluation
+Loads the saved checkpoint and test split, then prints a full metric report.
+
+Usage
+-----
+python training/evaluate.py
+python training/evaluate.py --model-dir model --output-dir reports
+"""
 
 import argparse
+import json
 import os
 import sys
-from pathlib import Path
 
 import numpy as np
 import torch
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from model.sensor_classifier import SensorClassifier
-from training.dataset import Standardizer, apply_standardizer, clean_dataset, load_sensor_csv, resolve_dataset_path, stratified_split
+from model.sensor_classifier  import SensorClassifier
+from preprocessing.normalise   import SensorNormalizer
 
-
-DEFAULT_DATA_PATH = Path(r"d:/Downloads/tremor/Dataset.csv")
-DEFAULT_CHECKPOINT = Path(__file__).resolve().parents[1] / "model" / "sensor_classifier.pth"
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate the DeepStable tremor classifier.")
-    parser.add_argument("--data-path", type=Path, default=None)
-    parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
-    return parser.parse_args()
-
-
-def compute_metrics(targets: np.ndarray, probabilities: np.ndarray, threshold: float = 0.5) -> dict[str, float]:
-    predictions = (probabilities >= threshold).astype(int)
-    targets = targets.astype(int)
-
-    tp = int(np.sum((predictions == 1) & (targets == 1)))
-    tn = int(np.sum((predictions == 0) & (targets == 0)))
-    fp = int(np.sum((predictions == 1) & (targets == 0)))
-    fn = int(np.sum((predictions == 0) & (targets == 1)))
-
-    accuracy = (tp + tn) / max(1, len(targets))
-    precision = tp / max(1, tp + fp)
-    recall = tp / max(1, tp + fn)
-    f1 = 2 * precision * recall / max(1e-12, precision + recall)
-    specificity = tn / max(1, tn + fp)
-    balanced_accuracy = 0.5 * (recall + specificity)
-
-    return {
-        "accuracy": float(accuracy),
-        "precision": float(precision),
-        "recall": float(recall),
-        "f1": float(f1),
-        "specificity": float(specificity),
-        "balanced_accuracy": float(balanced_accuracy),
-        "tp": float(tp),
-        "tn": float(tn),
-        "fp": float(fp),
-        "fn": float(fn),
-    }
+try:
+    from sklearn.metrics import (
+        accuracy_score,
+        precision_score,
+        recall_score,
+        f1_score,
+        confusion_matrix,
+        balanced_accuracy_score,
+        classification_report,
+    )
+    SKLEARN_OK = True
+except ImportError:
+    SKLEARN_OK = False
+    print("[evaluate] WARNING: scikit-learn not found. Install it for full metrics.")
 
 
-def main() -> None:
-    args = parse_args()
-    data_path = resolve_dataset_path(args.data_path)
-    features, targets, _ = load_sensor_csv(data_path)
-    features, targets = clean_dataset(features, targets)
-    (_, _), (_, _), (test_x, test_y) = stratified_split(features, targets)
+# ─────────────────────────────────────────────────────────────────────────────
+# Load helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
-    checkpoint = torch.load(args.checkpoint, map_location="cpu")
-    standardizer = Standardizer(mean=checkpoint["standardizer_mean"], std=checkpoint["standardizer_std"])
-    test_x = apply_standardizer(test_x, standardizer)
-
-    model = SensorClassifier(input_dim=test_x.shape[1])
-    model.load_state_dict(checkpoint["model_state_dict"])
+def load_model(model_dir: str, device: torch.device) -> SensorClassifier:
+    ckpt_path = os.path.join(model_dir, "sensor_classifier.pth")
+    if not os.path.exists(ckpt_path):
+        raise FileNotFoundError(
+            f"No checkpoint found at '{ckpt_path}'. "
+            "Run  python training/train.py  first."
+        )
+    ckpt = torch.load(ckpt_path, map_location=device)
+    model = SensorClassifier(
+        input_dim=ckpt["input_dim"],
+        num_classes=ckpt["num_classes"],
+        dropout=ckpt.get("dropout", 0.3),
+    ).to(device)
+    model.load_state_dict(ckpt["model_state"])
     model.eval()
+    print(f"[evaluate] Loaded checkpoint from epoch {ckpt['epoch']}  "
+          f"(val_loss={ckpt['val_loss']:.4f}  val_acc={ckpt['val_acc']:.4f})")
+    return model, ckpt["num_classes"]
 
+
+def load_test_data(model_dir: str):
+    X_path = os.path.join(model_dir, "X_test.npy")
+    y_path = os.path.join(model_dir, "y_test.npy")
+    if not (os.path.exists(X_path) and os.path.exists(y_path)):
+        raise FileNotFoundError(
+            "Test split not found. Run  python training/train.py  first."
+        )
+    return np.load(X_path), np.load(y_path)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Evaluate
+# ─────────────────────────────────────────────────────────────────────────────
+
+def evaluate(args):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"[evaluate] Device: {device}\n")
+
+    model, num_classes = load_model(args.model_dir, device)
+    X_test, y_test     = load_test_data(args.model_dir)
+
+    # ── Inference ─────────────────────────────────────────────────────────────
     with torch.no_grad():
-        logits = model(torch.tensor(test_x, dtype=torch.float32))
-        probabilities = torch.sigmoid(logits).numpy()
+        logits = model(torch.tensor(X_test, dtype=torch.float32).to(device))
+        proba  = torch.softmax(logits, dim=-1).cpu().numpy()
+        y_pred = logits.argmax(dim=-1).cpu().numpy()
 
-    metrics = compute_metrics(test_y, probabilities)
-    print("DeepStable dataset evaluation")
-    print(f"Accuracy:  {metrics['accuracy']:.4f}")
-    print(f"Precision: {metrics['precision']:.4f}")
-    print(f"Recall:    {metrics['recall']:.4f}")
-    print(f"F1 score:  {metrics['f1']:.4f}")
-    print(f"Specificity: {metrics['specificity']:.4f}")
-    print(f"Balanced accuracy: {metrics['balanced_accuracy']:.4f}")
-    print(f"Confusion matrix: TP={int(metrics['tp'])}, TN={int(metrics['tn'])}, FP={int(metrics['fp'])}, FN={int(metrics['fn'])}")
+    # ── Metrics ───────────────────────────────────────────────────────────────
+    report = {}
+    avg    = "binary" if num_classes == 2 else "macro"
+
+    if SKLEARN_OK:
+        report["accuracy"]          = float(accuracy_score(y_test, y_pred))
+        report["precision"]         = float(precision_score(y_test, y_pred, average=avg, zero_division=0))
+        report["recall"]            = float(recall_score(y_test, y_pred, average=avg, zero_division=0))
+        report["f1"]                = float(f1_score(y_test, y_pred, average=avg, zero_division=0))
+        report["balanced_accuracy"] = float(balanced_accuracy_score(y_test, y_pred))
+        cm                          = confusion_matrix(y_test, y_pred)
+
+        # Specificity (for binary)
+        if num_classes == 2:
+            tn, fp, fn, tp        = cm.ravel()
+            report["specificity"] = float(tn / (tn + fp + 1e-8))
+        else:
+            report["specificity"] = None
+    else:
+        # Fallback plain accuracy
+        report["accuracy"] = float((y_pred == y_test).mean())
+
+    # ── Print ─────────────────────────────────────────────────────────────────
+    sep = "═" * 45
+    print(sep)
+    print("  DeepStable  –  Evaluation Report")
+    print(sep)
+    print(f"  Test samples      : {len(y_test)}")
+    print(f"  Classes           : {num_classes}")
+    print(f"  Accuracy          : {report['accuracy']:.4f}  ({report['accuracy']*100:.2f}%)")
+
+    if SKLEARN_OK:
+        print(f"  Precision         : {report['precision']:.4f}")
+        print(f"  Recall            : {report['recall']:.4f}")
+        print(f"  F1 Score          : {report['f1']:.4f}")
+        print(f"  Balanced Accuracy : {report['balanced_accuracy']:.4f}")
+        if report["specificity"] is not None:
+            print(f"  Specificity       : {report['specificity']:.4f}")
+        print()
+        print("  Confusion Matrix:")
+        for row in cm:
+            print("   ", row)
+        print()
+        print("  Classification Report:")
+        print(classification_report(y_test, y_pred))
+
+    print(sep)
+
+    # ── Save report ───────────────────────────────────────────────────────────
+    os.makedirs(args.output_dir, exist_ok=True)
+    report_path = os.path.join(args.output_dir, "evaluation_report.json")
+    with open(report_path, "w") as f:
+        json.dump(report, f, indent=2)
+    print(f"[evaluate] Report saved → {report_path}")
+
+    return report
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLI
+# ─────────────────────────────────────────────────────────────────────────────
+
+def parse_args():
+    p = argparse.ArgumentParser(description="DeepStable – evaluate the saved model")
+    p.add_argument("--model-dir",  default="model",   help="Directory with checkpoint")
+    p.add_argument("--output-dir", default="reports", help="Where to save the JSON report")
+    return p.parse_args()
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    evaluate(args)
