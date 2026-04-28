@@ -28,8 +28,8 @@ function makeChart(id, label, color) {
       scales: {
         x: { display: false },
         y: {
-          ticks: { color: "#6b7a9d", font: { family: "Courier New" } },
-          grid:  { color: "#1e2740" },
+          ticks: { color: "#6b7280", font: { family: "system-ui, sans-serif", size: 11 } },
+          grid:  { color: "#e5e7eb", drawBorder: false },
         }
       },
       plugins: { legend: { display: false } },
@@ -77,7 +77,7 @@ const $badge   = document.getElementById("mode-badge");
 
 // ── Init charts ───────────────────────────────────────────────────────────────
 
-const chartAX   = makeChart("chart-ax",   "aX",        "#38bdf8");
+const chartAX   = makeChart("chart-ax",   "aX",        "#3b82f6");
 const chartRisk = makeChart("chart-risk", "Risk Score", "#ef4444");
 
 let tick = 0;
@@ -114,8 +114,11 @@ async function poll() {
 
     // Badge
     if (state.real_model) {
-      $badge.textContent  = "REAL MODEL";
-      $badge.className    = "badge badge--real";
+      $badge.textContent = state.data_source === "dataset" ? "MODEL + DATA" : "REAL MODEL";
+      $badge.className   = "badge badge--real";
+    } else if (state.data_source === "dataset") {
+      $badge.textContent = "DATA REPLAY";
+      $badge.className   = "badge badge--demo";
     }
 
     // Sensor row

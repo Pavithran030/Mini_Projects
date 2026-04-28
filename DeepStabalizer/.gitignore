@@ -1,6 +1,121 @@
-venv/
-.venv/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-project
+*.sublime-workspace
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Machine Learning Models & Large Files
 *.pth
+*.pkl
+*.pickle
+*.h5
+*.onnx
+*.pb
+*.ckpt
+*.pt
+model/**/*.pth
+
+# Data Files (large datasets)
+data/raw/*.csv
+data/processed/
+*.npy
+*.npz
+
+# Training outputs
+training/model/X_test.npy
+training/model/y_test.npy
+training/reports/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
 *.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+.directory
+
+# Coverage
+.coverage
+htmlcov/
+
+# pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Black
+.black
+
+# Flask
+instance/
+.webassets-cache
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Misc
+.env.example
+.vscode-settings.json

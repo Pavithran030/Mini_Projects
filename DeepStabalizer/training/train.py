@@ -224,7 +224,7 @@ def train(args):
 
 def parse_args():
     p = argparse.ArgumentParser(description="DeepStable – train the SensorClassifier")
-    p.add_argument("--data",          default="data/raw/Dataset.csv",
+    p.add_argument("--data",          default=r"D:\\files\\data\\raw\\Dataset.csv",
                    help="Path to the Kaggle tremor CSV")
     p.add_argument("--model-dir",     default="model",
                    help="Directory to save checkpoint + scaler")
